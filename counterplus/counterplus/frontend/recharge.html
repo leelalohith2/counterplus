@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Recharge & Pay — Counter+</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<div class="app-shell">
+  <aside class="sidebar">
+    <div class="brand">
+      <div class="brand-mark">C+</div>
+      <div class="brand-name">Counter<span>+</span></div>
+    </div>
+    <a class="nav-link" href="dashboard.html">🏠 <span class="label">Dashboard</span></a>
+    <a class="nav-link active" href="recharge.html">⚡ <span class="label">Recharge &amp; Pay</span></a>
+    <a class="nav-link logout" href="#" id="logoutBtn">↩ <span class="label">Log out</span></a>
+  </aside>
+
+  <main class="main">
+    <h1>Recharge &amp; Pay</h1>
+    <p class="lede">Wallet balance: <strong id="walletBalance">₹0.00</strong></p>
+
+    <div class="banner error" id="errorBanner"></div>
+    <div class="banner success" id="successBanner"></div>
+
+    <div class="panel-block">
+      <h3>1. Choose a service</h3>
+      <div class="op-grid" id="typeGrid">
+        <div class="op-chip" data-type="mobile_recharge">📱 Mobile Recharge</div>
+        <div class="op-chip" data-type="dth_recharge">📺 DTH Recharge</div>
+        <div class="op-chip" data-type="bill_payment">💡 Bill Payment</div>
+      </div>
+
+      <h3 style="margin-top:22px;">2. Choose operator</h3>
+      <div class="op-grid" id="operatorGrid">
+        <div style="color:var(--muted); font-size:13px;">Select a service above first.</div>
+      </div>
+
+      <h3 style="margin-top:22px;">3. Details</h3>
+      <form id="rechargeForm" novalidate>
+        <div class="field-row">
+          <div class="field">
+            <label for="accountNumber">Mobile / consumer number</label>
+            <div class="input-wrap"><input type="text" id="accountNumber" placeholder="10-digit number or consumer ID" required></div>
+          </div>
+          <div class="field">
+            <label for="amount">Amount (₹)</label>
+            <div class="input-wrap"><input type="number" id="amount" placeholder="e.g. 299" min="1" step="1" required></div>
+          </div>
+        </div>
+        <button type="submit" class="btn-primary" style="max-width:260px;">Pay now <span class="arrow">→</span></button>
+      </form>
+    </div>
+
+    <div class="panel-block">
+      <h3>Recent activity</h3>
+      <table class="txn-table">
+        <thead><tr><th>Date</th><th>Type</th><th>Operator</th><th>Account</th><th>Amount</th><th>Status</th></tr></thead>
+        <tbody id="txnBody"><tr><td colspan="6" style="color:var(--muted);">Loading…</td></tr></tbody>
+      </table>
+    </div>
+  </main>
+</div>
+
+<script src="config.js"></script>
+<script src="api.js"></script>
+<script>
+  requireAuth();
+
+  let selectedType = null;
+  let selectedOperator = null;
+  let operatorsData = {};
+
+  const errorBanner = document.getElementById('errorBanner');
+  const successBanner = document.getElementById('successBanner');
+  function showError(msg) { successBanner.classList.remove('show'); errorBanner.textContent = msg; errorBanner.classList.add('show'); }
+  function showSuccess(msg) { errorBanner.classList.remove('show'); successBanner.textContent = msg; successBanner.classList.add('show'); }
+
+  function statusBadge(status) { return `<span class="badge ${status}">${status}</span>`; }
+
+  async function loadWallet() {
+    const user = await api.me();
+    document.getElementById('walletBalance').textContent = `₹${user.wallet_balance.toFixed(2)}`;
+  }
+
+  async function loadTxns() {
+    const txns = await api.transactions();
+    const body = document.getElementById('txnBody');
+    body.innerHTML = txns.length ? txns.slice(0, 10).map(t => `
+      <tr>
+        <td>${new Date(t.created_at).toLocaleString()}</td>
+        <td>${t.type.replace('_', ' ')}</td>
+        <td>${t.operator || '—'}</td>
+        <td>${t.account_number || '—'}</td>
+        <td>₹${t.amount.toFixed(2)}</td>
+        <td>${statusBadge(t.status)}</td>
+      </tr>
+    `).join('') : `<tr><td colspan="6" style="color:var(--muted);">No transactions yet.</td></tr>`;
+  }
+
+  async function init() {
+    try {
+      operatorsData = await api.operators();
+      await loadWallet();
+      await loadTxns();
+    } catch (err) {
+      if (err.message.includes('logged in') || err.message.includes('validate')) {
+        clearToken();
+        window.location.href = 'login.html';
+      } else {
+        showError(err.message);
+      }
+    }
+  }
+  init();
+
+  document.getElementById('typeGrid').addEventListener('click', (e) => {
+    const chip = e.target.closest('.op-chip');
+    if (!chip) return;
+    document.querySelectorAll('#typeGrid .op-chip').forEach(c => c.classList.remove('selected'));
+    chip.classList.add('selected');
+    selectedType = chip.dataset.type;
+    selectedOperator = null;
+
+    const grid = document.getElementById('operatorGrid');
+    const ops = operatorsData[selectedType] || [];
+    grid.innerHTML = ops.map(op => `<div class="op-chip" data-op="${op}">${op}</div>`).join('');
+  });
+
+  document.getElementById('operatorGrid').addEventListener('click', (e) => {
+    const chip = e.target.closest('.op-chip');
+    if (!chip) return;
+    document.querySelectorAll('#operatorGrid .op-chip').forEach(c => c.classList.remove('selected'));
+    chip.classList.add('selected');
+    selectedOperator = chip.dataset.op;
+  });
+
+  document.getElementById('rechargeForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    errorBanner.classList.remove('show');
+    successBanner.classList.remove('show');
+
+    const accountNumber = document.getElementById('accountNumber').value.trim();
+    const amount = parseFloat(document.getElementById('amount').value);
+
+    if (!selectedType) { showError('Choose a service first.'); return; }
+    if (!selectedOperator) { showError('Choose an operator first.'); return; }
+    if (!accountNumber) { showError('Enter the mobile or consumer number.'); return; }
+    if (!amount || amount <= 0) { showError('Enter a valid amount.'); return; }
+
+    const btn = e.target.querySelector('.btn-primary');
+    const original = btn.innerHTML;
+    btn.disabled = true;
+    btn.textContent = 'Processing…';
+
+    try {
+      const txn = await api.recharge({
+        type: selectedType,
+        operator: selectedOperator,
+        account_number: accountNumber,
+        amount,
+      });
+      showSuccess(`Success — ₹${amount.toFixed(2)} to ${accountNumber} via ${selectedOperator}. Ref: ${txn.provider_ref}`);
+      document.getElementById('accountNumber').value = '';
+      document.getElementById('amount').value = '';
+      loadWallet();
+      loadTxns();
+    } catch (err) {
+      showError(err.message);
+      loadWallet();
+      loadTxns();
+    } finally {
+      btn.disabled = false;
+      btn.innerHTML = original;
+    }
+  });
+
+  document.getElementById('logoutBtn').addEventListener('click', (e) => {
+    e.preventDefault();
+    clearToken();
+    window.location.href = 'login.html';
+  });
+</script>
+</body>
+</html>

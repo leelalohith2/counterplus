@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Partner Login — Counter+</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<div class="shell">
+
+  <section class="panel">
+    <div class="brand">
+      <div class="brand-mark">C+</div>
+      <div class="brand-name">Counter<span>+</span></div>
+    </div>
+
+    <h1>Every recharge, bill and payout — one counter.</h1>
+    <p class="panel-sub">Sign in to top up mobiles, settle DTH and utility bills, and track your commission, all from a single dashboard built for retail agents.</p>
+
+    <div class="ledger">
+      <div class="ledger-head">
+        <span>Today's counter</span>
+        <span id="clock">--:--</span>
+      </div>
+      <div class="ledger-row"><span class="tag"><span class="dot"></span>Mobile recharge</span><span class="amt">₹299.00</span></div>
+      <div class="ledger-row"><span class="tag"><span class="dot"></span>DTH renewal</span><span class="amt">₹450.00</span></div>
+      <div class="ledger-row"><span class="tag"><span class="dot"></span>Electricity bill</span><span class="amt">₹1,120.00</span></div>
+      <div class="ledger-row"><span class="tag"><span class="dot"></span>API settlement</span><span class="amt">₹6,842.00</span></div>
+      <div class="ledger-foot"><span>4 transactions</span><span>settled instantly</span></div>
+    </div>
+  </section>
+
+  <section class="formside">
+    <div class="card">
+      <span class="card-eyebrow">Partner access</span>
+      <h2>Log in to your dashboard</h2>
+      <p class="card-sub">New here? <a href="register.html">Register your shop</a> and start dispensing in minutes.</p>
+
+      <div class="banner error" id="errorBanner"></div>
+
+      <form id="loginForm" novalidate>
+        <div class="field">
+          <label for="identifier">Email or mobile</label>
+          <div class="input-wrap">
+            <input type="text" id="identifier" name="identifier" placeholder="you@shop.com or 98XXXXXXXX" autocomplete="username" required>
+          </div>
+        </div>
+
+        <div class="field">
+          <label for="password">Password</label>
+          <div class="input-wrap">
+            <input type="password" id="password" name="password" placeholder="••••••••" autocomplete="current-password" required>
+            <button type="button" class="toggle-visibility" id="togglePw">Show</button>
+          </div>
+        </div>
+
+        <div class="field">
+          <label for="captchaInput">Security code</label>
+          <div class="captcha-row">
+            <div class="captcha-box" id="captchaText">····</div>
+            <button type="button" class="captcha-refresh" id="captchaRefresh" title="Get a new code">↻</button>
+          </div>
+          <div class="input-wrap" style="margin-top:10px;">
+            <input type="text" id="captchaInput" name="captcha" placeholder="Type the code above" required>
+          </div>
+        </div>
+
+        <button type="submit" class="btn-primary">
+          Log in to dashboard <span class="arrow">→</span>
+        </button>
+
+        <div class="form-foot">
+          <a href="#">Forgot password?</a>
+          <a href="register.html">Create an account</a>
+        </div>
+      </form>
+
+      <div class="trust-row">
+        <div class="item"><span class="dot"></span>256-bit secure</div>
+        <div class="item"><span class="dot"></span>Instant settlement</div>
+        <div class="item"><span class="dot"></span>24×7 support</div>
+      </div>
+
+      <p style="margin-top:22px; font-size:12px; color:var(--muted);">
+        Demo admin account — email <code>admin@counterplus.local</code>, password <code>ChangeMe123!</code>
+      </p>
+    </div>
+  </section>
+
+</div>
+
+<script src="config.js"></script>
+<script src="api.js"></script>
+<script>
+  const clockEl = document.getElementById('clock');
+  const tick = () => {
+    const now = new Date();
+    clockEl.textContent = `${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
+  };
+  tick(); setInterval(tick, 15000);
+
+  document.getElementById('togglePw').addEventListener('click', (e) => {
+    const input = document.getElementById('password');
+    const show = input.type === 'password';
+    input.type = show ? 'text' : 'password';
+    e.target.textContent = show ? 'Hide' : 'Show';
+  });
+
+  let currentCaptchaId = null;
+
+  async function loadCaptcha() {
+    try {
+      const { captcha_id, captcha_text } = await api.getCaptcha();
+      currentCaptchaId = captcha_id;
+      document.getElementById('captchaText').textContent = captcha_text.split('').join(' ');
+    } catch (err) {
+      document.getElementById('captchaText').textContent = 'error';
+    }
+  }
+  loadCaptcha();
+  document.getElementById('captchaRefresh').addEventListener('click', (e) => {
+    e.currentTarget.classList.add('spin');
+    loadCaptcha();
+    setTimeout(() => e.currentTarget.classList.remove('spin'), 300);
+  });
+
+  const banner = document.getElementById('errorBanner');
+  function showError(msg) {
+    banner.textContent = msg;
+    banner.classList.add('show');
+  }
+
+  document.getElementById('loginForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    banner.classList.remove('show');
+
+    const identifier = document.getElementById('identifier').value.trim();
+    const password = document.getElementById('password').value;
+    const captchaAnswer = document.getElementById('captchaInput').value.trim();
+
+    if (!identifier || !password || !captchaAnswer) {
+      showError('Please fill in all fields.');
+      return;
+    }
+
+    const btn = e.target.querySelector('.btn-primary');
+    const original = btn.innerHTML;
+    btn.disabled = true;
+    btn.textContent = 'Logging in…';
+
+    try {
+      const { access_token } = await api.login({
+        identifier, password,
+        captcha_id: currentCaptchaId,
+        captcha_answer: captchaAnswer,
+      });
+      setToken(access_token);
+      window.location.href = 'dashboard.html';
+    } catch (err) {
+      showError(err.message);
+      loadCaptcha();
+      document.getElementById('captchaInput').value = '';
+    } finally {
+      btn.disabled = false;
+      btn.innerHTML = original;
+    }
+  });
+</script>
+</body>
+</html>

@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Register — Counter+</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<div class="shell">
+
+  <section class="panel">
+    <div class="brand">
+      <div class="brand-mark">C+</div>
+      <div class="brand-name">Counter<span>+</span></div>
+    </div>
+
+    <h1>Open your counter in under two minutes.</h1>
+    <p class="panel-sub">Register your shop, get verified, and start earning commission on every mobile recharge, DTH renewal and bill payment you process.</p>
+
+    <div class="ledger">
+      <div class="ledger-head"><span>Onboarding</span><span>Step 1 of 3</span></div>
+      <div class="ledger-row"><span class="tag"><span class="dot"></span>Shop details</span><span class="amt">now</span></div>
+      <div class="ledger-row"><span class="tag"><span class="dot"></span>KYC verification</span><span class="amt">~1 day</span></div>
+      <div class="ledger-row"><span class="tag"><span class="dot"></span>Wallet activation</span><span class="amt">instant</span></div>
+      <div class="ledger-foot"><span>3 steps</span><span>no setup fee</span></div>
+    </div>
+  </section>
+
+  <section class="formside">
+    <div class="card">
+      <span class="card-eyebrow">Partner registration</span>
+      <h2>Register your shop</h2>
+      <p class="card-sub">Already registered? <a href="login.html">Log in</a> to your dashboard instead.</p>
+
+      <div class="banner error" id="errorBanner"></div>
+
+      <form id="registerForm" novalidate>
+        <div class="field-row">
+          <div class="field">
+            <label for="shopName">Shop / business name</label>
+            <div class="input-wrap"><input type="text" id="shopName" placeholder="Sharma Mobile Point" required></div>
+          </div>
+          <div class="field">
+            <label for="ownerName">Owner's name</label>
+            <div class="input-wrap"><input type="text" id="ownerName" placeholder="Full name" required></div>
+          </div>
+        </div>
+
+        <div class="field-row">
+          <div class="field">
+            <label for="mobile">Mobile number</label>
+            <div class="input-wrap"><input type="tel" id="mobile" placeholder="98XXXXXXXX" pattern="[0-9]{10}" required></div>
+          </div>
+          <div class="field">
+            <label for="email">Email address</label>
+            <div class="input-wrap"><input type="email" id="email" placeholder="you@shop.com" required></div>
+          </div>
+        </div>
+
+        <div class="field">
+          <label for="regPassword">Create password</label>
+          <div class="input-wrap">
+            <input type="password" id="regPassword" placeholder="At least 8 characters" minlength="8" autocomplete="new-password" required>
+            <button type="button" class="toggle-visibility" id="togglePw">Show</button>
+          </div>
+          <p class="hint">Use 8+ characters with a mix of letters, numbers &amp; symbols.</p>
+        </div>
+
+        <div class="field">
+          <label for="referral">Referral code <span style="color:#9CA3AF; font-weight:400;">(optional)</span></label>
+          <div class="input-wrap"><input type="text" id="referral" placeholder="e.g. CNTR2024"></div>
+        </div>
+
+        <div class="field">
+          <label for="captchaInput">Security code</label>
+          <div class="captcha-row">
+            <div class="captcha-box" id="captchaText">····</div>
+            <button type="button" class="captcha-refresh" id="captchaRefresh" title="Get a new code">↻</button>
+          </div>
+          <div class="input-wrap" style="margin-top:10px;">
+            <input type="text" id="captchaInput" placeholder="Type the code above" required>
+          </div>
+        </div>
+
+        <button type="submit" class="btn-primary">
+          Create my account <span class="arrow">→</span>
+        </button>
+
+        <div class="form-foot">
+          <a href="login.html">Back to login</a>
+          <a href="#">Need help?</a>
+        </div>
+      </form>
+    </div>
+  </section>
+
+</div>
+
+<script src="config.js"></script>
+<script src="api.js"></script>
+<script>
+  document.getElementById('togglePw').addEventListener('click', (e) => {
+    const input = document.getElementById('regPassword');
+    const show = input.type === 'password';
+    input.type = show ? 'text' : 'password';
+    e.target.textContent = show ? 'Hide' : 'Show';
+  });
+
+  let currentCaptchaId = null;
+  async function loadCaptcha() {
+    try {
+      const { captcha_id, captcha_text } = await api.getCaptcha();
+      currentCaptchaId = captcha_id;
+      document.getElementById('captchaText').textContent = captcha_text.split('').join(' ');
+    } catch (err) {
+      document.getElementById('captchaText').textContent = 'error';
+    }
+  }
+  loadCaptcha();
+  document.getElementById('captchaRefresh').addEventListener('click', (e) => {
+    e.currentTarget.classList.add('spin');
+    loadCaptcha();
+    setTimeout(() => e.currentTarget.classList.remove('spin'), 300);
+  });
+
+  const banner = document.getElementById('errorBanner');
+  function showError(msg) {
+    banner.textContent = msg;
+    banner.classList.add('show');
+  }
+
+  document.getElementById('registerForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    banner.classList.remove('show');
+
+    const payload = {
+      shop_name: document.getElementById('shopName').value.trim(),
+      owner_name: document.getElementById('ownerName').value.trim(),
+      mobile: document.getElementById('mobile').value.trim(),
+      email: document.getElementById('email').value.trim(),
+      password: document.getElementById('regPassword').value,
+      referral_code: document.getElementById('referral').value.trim() || null,
+      captcha_id: currentCaptchaId,
+      captcha_answer: document.getElementById('captchaInput').value.trim(),
+    };
+
+    if (!payload.shop_name || !payload.owner_name || !payload.mobile || !payload.email || !payload.password) {
+      showError('Please fill in all required fields.');
+      return;
+    }
+    if (payload.mobile.length !== 10) {
+      showError('Mobile number must be 10 digits.');
+      return;
+    }
+    if (payload.password.length < 8) {
+      showError('Password must be at least 8 characters.');
+      return;
+    }
+
+    const btn = e.target.querySelector('.btn-primary');
+    const original = btn.innerHTML;
+    btn.disabled = true;
+    btn.textContent = 'Creating account…';
+
+    try {
+      const { access_token } = await api.register(payload);
+      setToken(access_token);
+      window.location.href = 'dashboard.html';
+    } catch (err) {
+      showError(err.message);
+      loadCaptcha();
+      document.getElementById('captchaInput').value = '';
+    } finally {
+      btn.disabled = false;
+      btn.innerHTML = original;
+    }
+  });
+</script>
+</body>
+</html>

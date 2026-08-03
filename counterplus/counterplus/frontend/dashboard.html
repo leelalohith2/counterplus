@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Dashboard — Counter+</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<div class="app-shell">
+  <aside class="sidebar">
+    <div class="brand">
+      <div class="brand-mark">C+</div>
+      <div class="brand-name">Counter<span>+</span></div>
+    </div>
+    <a class="nav-link active" href="dashboard.html">🏠 <span class="label">Dashboard</span></a>
+    <a class="nav-link" href="recharge.html">⚡ <span class="label">Recharge &amp; Pay</span></a>
+    <a class="nav-link logout" href="#" id="logoutBtn">↩ <span class="label">Log out</span></a>
+  </aside>
+
+  <main class="main">
+    <h1 id="greeting">Welcome back</h1>
+    <p class="lede">Here's what's happening at your counter.</p>
+
+    <div class="banner error" id="errorBanner"></div>
+    <div class="banner success" id="successBanner"></div>
+
+    <div class="stat-grid">
+      <div class="stat-card">
+        <span class="label">Wallet balance</span>
+        <div class="value amber" id="walletBalance">₹0.00</div>
+      </div>
+      <div class="stat-card">
+        <span class="label">Transactions (all time)</span>
+        <div class="value" id="txnCount">0</div>
+      </div>
+      <div class="stat-card">
+        <span class="label">KYC status</span>
+        <div class="value" id="kycStatus">—</div>
+      </div>
+    </div>
+
+    <div class="panel-block">
+      <h3>Top up wallet (mock payment)</h3>
+      <div class="input-wrap" style="max-width:220px; display:inline-flex; margin-right:10px;">
+        <input type="number" id="topupAmount" placeholder="Amount ₹" min="1" step="1">
+      </div>
+      <button class="btn-primary" id="topupBtn" style="width:auto; display:inline-flex; padding:12px 20px;">Add funds</button>
+      <p class="hint" style="margin-top:12px;">This uses the mock payment gateway — no real money moves. Switch <code>PAYMENT_MODE=live</code> once you have a real gateway account.</p>
+    </div>
+
+    <div class="panel-block">
+      <h3>Recent transactions</h3>
+      <table class="txn-table">
+        <thead>
+          <tr><th>Date</th><th>Type</th><th>Operator</th><th>Account</th><th>Amount</th><th>Status</th></tr>
+        </thead>
+        <tbody id="txnBody">
+          <tr><td colspan="6" style="color:var(--muted);">Loading…</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </main>
+</div>
+
+<script src="config.js"></script>
+<script src="api.js"></script>
+<script>
+  requireAuth();
+
+  const errorBanner = document.getElementById('errorBanner');
+  const successBanner = document.getElementById('successBanner');
+  function showError(msg) { errorBanner.textContent = msg; errorBanner.classList.add('show'); }
+  function showSuccess(msg) { successBanner.textContent = msg; successBanner.classList.add('show'); }
+  function hideBanners() { errorBanner.classList.remove('show'); successBanner.classList.remove('show'); }
+
+  function statusBadge(status) {
+    return `<span class="badge ${status}">${status}</span>`;
+  }
+
+  async function loadDashboard() {
+    try {
+      const user = await api.me();
+      document.getElementById('greeting').textContent = `Welcome back, ${user.owner_name.split(' ')[0]}`;
+      document.getElementById('walletBalance').textContent = `₹${user.wallet_balance.toFixed(2)}`;
+      document.getElementById('kycStatus').textContent = user.kyc_status;
+
+      const txns = await api.transactions();
+      document.getElementById('txnCount').textContent = txns.length;
+
+      const body = document.getElementById('txnBody');
+      if (txns.length === 0) {
+        body.innerHTML = `<tr><td colspan="6" style="color:var(--muted);">No transactions yet — head to Recharge &amp; Pay to get started.</td></tr>`;
+      } else {
+        body.innerHTML = txns.slice(0, 10).map(t => `
+          <tr>
+            <td>${new Date(t.created_at).toLocaleString()}</td>
+            <td>${t.type.replace('_', ' ')}</td>
+            <td>${t.operator || '—'}</td>
+            <td>${t.account_number || '—'}</td>
+            <td>₹${t.amount.toFixed(2)}</td>
+            <td>${statusBadge(t.status)}</td>
+          </tr>
+        `).join('');
+      }
+    } catch (err) {
+      if (err.message.includes('logged in') || err.message.includes('validate')) {
+        clearToken();
+        window.location.href = 'login.html';
+      } else {
+        showError(err.message);
+      }
+    }
+  }
+  loadDashboard();
+
+  document.getElementById('topupBtn').addEventListener('click', async () => {
+    hideBanners();
+    const amount = parseFloat(document.getElementById('topupAmount').value);
+    if (!amount || amount <= 0) {
+      showError('Enter a valid amount.');
+      return;
+    }
+    try {
+      await api.walletTopup(amount);
+      showSuccess(`₹${amount.toFixed(2)} added to your wallet.`);
+      document.getElementById('topupAmount').value = '';
+      loadDashboard();
+    } catch (err) {
+      showError(err.message);
+    }
+  });
+
+  document.getElementById('logoutBtn').addEventListener('click', (e) => {
+    e.preventDefault();
+    clearToken();
+    window.location.href = 'login.html';
+  });
+</script>
+</body>
+</html>
